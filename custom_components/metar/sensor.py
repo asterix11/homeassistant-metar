@@ -90,6 +90,7 @@ class MetarSensor(Entity):
 
         clouds = []
         try:
+            data = self.weather_data.sensor_data.sky_conditions("\n     ")
             result = re.findall("[a-z\\W]+(few|broken|overcast)[a-z\\W]+([0-9]+)\\Wfeet", data)
             result = sorted(list(map(lambda x : (1 if x[0] == 'overcast' else (2 if x[0] == 'broken' else (3 if x[0] == 'scattered' else (4 if x[0] == 'few' else -1))), int(x[1])), result)), key=lambda x : (x[1], x[0]))
             clouds = result
