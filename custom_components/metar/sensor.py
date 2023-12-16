@@ -122,7 +122,7 @@ class MetarSensor(Entity):
                 result_significant = list(filter(lambda x : (x[0] == 1 or x[0] == 2) and x[1] <= 3000, result))
                 if len(result_significant) == 0:
                     state = "NSC"
-                if (result_significant[0][0] == 1):
+                elif (result_significant[0][0] == 1):
                     state = "OVC"
                 self._state = state
             elif self.type == 'significant_clouds_height':
@@ -130,7 +130,7 @@ class MetarSensor(Entity):
                 result_significant = list(filter(lambda x : (x[0] == 1 or x[0] == 2) and x[1] <= 3000, result))
                 if len(result_significant) == 0:
                     state = 36000
-                elif:
+                else:
                     state = result_significant[0][1]
                 self._state = state
         except KeyError:
