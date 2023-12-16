@@ -16,7 +16,7 @@ import re
 DOMAIN = 'metar'
 CONF_AIRPORT_NAME = 'airport_name'
 CONF_AIRPORT_CODE = 'airport_code'
-SCAN_INTERVAL = timedelta(seconds=600)
+SCAN_INTERVAL = timedelta(seconds=30)
 BASE_URL = "https://tgftp.nws.noaa.gov/data/observations/metar/stations/"
 
 _LOGGER = logging.getLogger(__name__)
@@ -26,19 +26,20 @@ SENSOR_TYPES = {
     'weather': ['Condition', None],
     'temperature': ['Temperature', 'C'],
     'wind': ['Wind speed', None],
-    'pressure': ['Pressure', None],
+    'qnh': ['QNH', 'hPa'],
     'visibility': ['Visibility', None],
     'precipitation': ['Precipitation', None],
     'sky': ['Sky', None],
-    'significant_clouds_type': ['SignificantCloudsType', None],
-    'significant_clouds_height': ['SignificantCloudsHeight', None],
+    'sig_clouds_type': ['SIG Clouds Type', None],
+    'sig_clouds_height': ['SIG Clouds Height', None],
+    'flight_ruleset': ['Flight Ruleset', None],
 }
 
 PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend({
     vol.Required(CONF_AIRPORT_NAME): cv.string,
     vol.Required(CONF_AIRPORT_CODE): cv.string,
     vol.Optional(CONF_MONITORED_CONDITIONS, default=[]):
-        vol.All(cv.ensure_list, [vol.In(SENSOR_TYPES)]),	
+        vol.All(cv.ensure_list, [vol.In(SENSOR_TYPES)]),
 })
 
 def setup_platform(hass, config, add_entities, discovery_info=None):
@@ -88,12 +89,33 @@ class MetarSensor(Entity):
         if self.weather_data is None:
             return
 
+        qnh = 1013.25
+        visibility = 9999
         clouds = []
+
+        try:
+            data = self.weather_data.sensor_data.press.string("")
+            temp = data.split(" ")
+            qnh = float(temp[0])
+        except:
+            _LOGGER.warning(
+                "QNH is currently not available!")
+
+        try:
+            data = self.weather_data.sensor_data.visibility()
+            result = re.findall("([0-9]+)\\Wmeters", data)
+            if len(result) == 1:
+                visibility = int(result[0])
+        except:
+            _LOGGER.warning(
+                "Visibility is currently not available!")
         try:
             data = self.weather_data.sensor_data.sky_conditions("\n     ")
-            result = re.findall("[a-z\\W]+(few|broken|overcast)[a-z\\W]+([0-9]+)\\Wfeet", data)
+            result = re.findall(".*(few|scattered|broken|overcast)[a-z\\W]+([0-9]+)\\Wfeet", data)
             result = sorted(list(map(lambda x : (1 if x[0] == 'overcast' else (2 if x[0] == 'broken' else (3 if x[0] == 'scattered' else (4 if x[0] == 'few' else -1))), int(x[1])), result)), key=lambda x : (x[1], x[0]))
             clouds = result
+            _LOGGER.warning(data)
+            _LOGGER.warning(clouds)
         except:
             _LOGGER.warning(
                 "Clouds are currently not available!")
@@ -108,31 +130,42 @@ class MetarSensor(Entity):
                 self._state = self.weather_data.sensor_data.present_weather()
             elif self.type == 'wind':
                 self._state = self.weather_data.sensor_data.wind()
-            elif self.type == 'pressure':
-                self._state = self.weather_data.sensor_data.press.string("mb")
+            elif self.type == 'qnh':
+                self._state = qnh
+                self._unit_of_measurement = 'hPa'
             elif self.type == 'visibility':
-                self._state = self.weather_data.sensor_data.visibility()
+                self._state = visibility
                 self._unit_of_measurement = 'm'
             # elif self.type == 'precipitation':
                 # self._state = self.weather_data.sensor_data.precip_1hr.string("in")
                 # self._unit_of_measurement = 'mm'
             elif self.type == 'sky':
                self._state = self.weather_data.sensor_data.sky_conditions("\n     ")
-            elif self.type == 'significant_clouds_type':
+            elif self.type == 'sig_clouds_type':
                 state = "BKN"
-                clouds_significant = list(filter(lambda x : (x[0] == 1 or x[0] == 2) and x[1] <= 3000, clouds))
+                clouds_significant = list(filter(lambda x : x[0] == 1 or x[0] == 2 or x[0] == 3, clouds))
                 if len(clouds_significant) == 0:
                     state = "NSC"
                 elif (clouds_significant[0][0] == 1):
                     state = "OVC"
                 self._state = state
-            elif self.type == 'significant_clouds_height':
+            elif self.type == 'sig_clouds_height':
                 state = 0
-                clouds_significant = list(filter(lambda x : (x[0] == 1 or x[0] == 2) and x[1] <= 3000, clouds))
+                clouds_significant = list(filter(lambda x : x[0] == 1 or x[0] == 2 or x[0] == 3, clouds))
                 if len(clouds_significant) == 0:
                     state = 36000
                 else:
                     state = clouds_significant[0][1]
+                self._state = state
+            elif self.type == 'flight_ruleset':
+                state = 'LIFR'
+                clouds_significant = list(filter(lambda x : (x[0] == 1 or x[0] == 2 or x[0] == 3) and x[1] <= 3000, clouds))
+                if visibility > 8000 and len(clouds_significant) == 0:
+                    state = 'VFR'
+                elif visibility > 5000 and clouds_significant[0][1] > 1000:
+                    state = 'MVFR'
+                elif visibility > 1500 and clouds_significant[0][1] > 500:
+                    state = 'IFR'
                 self._state = state
         except KeyError:
             self._state = None
