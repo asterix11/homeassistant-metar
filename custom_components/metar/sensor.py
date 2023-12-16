@@ -119,19 +119,19 @@ class MetarSensor(Entity):
                self._state = self.weather_data.sensor_data.sky_conditions("\n     ")
             elif self.type == 'significant_clouds_type':
                 state = "BKN"
-                result_significant = list(filter(lambda x : (x[0] == 1 or x[0] == 2) and x[1] <= 3000, result))
-                if len(result_significant) == 0:
+                clouds_significant = list(filter(lambda x : (x[0] == 1 or x[0] == 2) and x[1] <= 3000, clouds))
+                if len(clouds_significant) == 0:
                     state = "NSC"
-                elif (result_significant[0][0] == 1):
+                elif (clouds_significant[0][0] == 1):
                     state = "OVC"
                 self._state = state
             elif self.type == 'significant_clouds_height':
                 state = 0
-                result_significant = list(filter(lambda x : (x[0] == 1 or x[0] == 2) and x[1] <= 3000, result))
-                if len(result_significant) == 0:
+                clouds_significant = list(filter(lambda x : (x[0] == 1 or x[0] == 2) and x[1] <= 3000, clouds))
+                if len(clouds_significant) == 0:
                     state = 36000
                 else:
-                    state = result_significant[0][1]
+                    state = clouds_significant[0][1]
                 self._state = state
         except KeyError:
             self._state = None
