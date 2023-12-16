@@ -11,11 +11,12 @@ try:
 except:
     from urllib.request import urlopen
 from metar import Metar
+import re
 
 DOMAIN = 'metar'
 CONF_AIRPORT_NAME = 'airport_name'
 CONF_AIRPORT_CODE = 'airport_code'
-SCAN_INTERVAL = timedelta(seconds=3600)
+SCAN_INTERVAL = timedelta(seconds=600)
 BASE_URL = "https://tgftp.nws.noaa.gov/data/observations/metar/stations/"
 
 _LOGGER = logging.getLogger(__name__)
@@ -29,6 +30,8 @@ SENSOR_TYPES = {
     'visibility': ['Visibility', None],
     'precipitation': ['Precipitation', None],
     'sky': ['Sky', None],
+    'significant_clouds_type': ['SignificantCloudsType', None],
+    'significant_clouds_height': ['SignificantCloudsHeight', None],
 }
 
 PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend({
@@ -85,6 +88,15 @@ class MetarSensor(Entity):
         if self.weather_data is None:
             return
 
+        clouds = []
+        try:
+            result = re.findall("[a-z\\W]+(few|broken|overcast)[a-z\\W]+([0-9]+)\\Wfeet", data)
+            result = sorted(list(map(lambda x : (1 if x[0] == 'overcast' else (2 if x[0] == 'broken' else (3 if x[0] == 'scattered' else (4 if x[0] == 'few' else -1))), int(x[1])), result)), key=lambda x : (x[1], x[0]))
+            clouds = result
+        except:
+            _LOGGER.warning(
+                "Clouds are currently not available!")
+
         try:
             if self.type == 'time':
                  self._state = self.weather_data.sensor_data.time.ctime()
@@ -105,6 +117,22 @@ class MetarSensor(Entity):
                 # self._unit_of_measurement = 'mm'
             elif self.type == 'sky':
                self._state = self.weather_data.sensor_data.sky_conditions("\n     ")
+            elif self.type == 'significant_clouds_type':
+                state = "BKN"
+                result_significant = list(filter(lambda x : (x[0] == 1 or x[0] == 2) and x[1] <= 3000, result))
+                if len(result_significant) == 0:
+                    state = "NSC"
+                if (result_significant[0][0] == 1):
+                    state = "OVC"
+                self._state = state
+            elif self.type == 'significant_clouds_height':
+                state = 0
+                result_significant = list(filter(lambda x : (x[0] == 1 or x[0] == 2) and x[1] <= 3000, result))
+                if len(result_significant) == 0:
+                    state = 36000
+                elif:
+                    state = result_significant[0][1]
+                self._state = state
         except KeyError:
             self._state = None
             _LOGGER.warning(
